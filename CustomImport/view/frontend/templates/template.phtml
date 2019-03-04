@@ -1,0 +1,8 @@
+<div role="alert" class="message <?php echo $block->getFinishedStatus(); ?>" style="background: none; font-size: 2rem; padding-top: 8px">
+    <div><?php echo __($block->getMessage()); ?></div>
+</div>
+<?php if ($block->getConfigurable()): ?>
+    <div role="alert" class="message success" style="background: none; font-size: 2rem; padding-top: 8px">
+        <div><?php echo __($block->getConfigurable()->getInfo()); ?></div>
+    </div>
+<?php endif; ?>
