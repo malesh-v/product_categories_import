@@ -6,6 +6,7 @@ use Magento\Eav\Model\Config;
 use Magento\Store\Model\StoreManagerInterface;
 use Magento\ConfigurableProduct\Model\Product\Type\Configurable;
 use Magento\ConfigurableProduct\Model\Product\Type\Configurable\Attribute;
+use Magento\ConfigurableProduct\Model\ResourceModel\Product\Type\Configurable\Attribute as ConfigurableAttribureResource;
 use Magento\Catalog\Model\Product;
 use Magento\Catalog\Api\Data\ProductInterfaceFactory;
 use Magento\Catalog\Api\ProductRepositoryInterface;
@@ -15,6 +16,7 @@ use Magento\Catalog\Model\Product\Visibility;
 use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory as ProductCollectionFactory;
 use Magento\Catalog\Model\ResourceModel\Category\CollectionFactory as CategoryCollectionFactory;
 use Magento\Catalog\Model\Product as ProductModel;
+use Psr\Log\LoggerInterface;
 
 class ConfigurableProductBuilder
 {
@@ -48,6 +50,12 @@ class ConfigurableProductBuilder
     /** @var string */
     private $info;
 
+    /** @var \Magento\ConfigurableProduct\Model\ResourceModel\Product\Type\Configurable\Attribute */
+    protected $optionResource;
+
+    /** @var \Psr\Log\LoggerInterface */
+    private $logger;
+
     public function __construct(
         ProductInterfaceFactory $productFactory,
         ProductModel $productModel,
@@ -56,7 +64,9 @@ class ConfigurableProductBuilder
         Attribute $attributeModel,
         CategoryCollectionFactory $categoryCollectionFactory,
         ProductCollectionFactory $productCollectionFactory,
-        StoreManagerInterface $storeManagerInterface
+        StoreManagerInterface $storeManagerInterface,
+        ConfigurableAttribureResource $optionResource,
+        LoggerInterface $logger
     )
     {
         $this->productFactory = $productFactory;
@@ -67,6 +77,8 @@ class ConfigurableProductBuilder
         $this->categoryCollectionFactory = $categoryCollectionFactory;
         $this->productCollectionFactory = $productCollectionFactory;
         $this->storeManagerInterface = $storeManagerInterface;
+        $this->optionResource = $optionResource;
+        $this->logger = $logger;
     }
 
     public function create()
@@ -85,8 +97,12 @@ class ConfigurableProductBuilder
                 'position' => $position++,
             ]);
 
-            try { $attributeModel->save(); }
-            catch (\Exception $e) {}
+            try {
+                $this->optionResource->save($attributeModel);
+            }
+            catch (\Exception $e) {
+                $this->logger->warning($e->getMessage());
+            }
         }
 
         $product->setTypeId(Configurable::TYPE_CODE);
@@ -94,7 +110,10 @@ class ConfigurableProductBuilder
 
         try {
             $product->save();
-        } catch (\Exception $e) {}
+        } catch (\Exception $e) {
+            $this->logger->warning('Configurable product with ' . $associatedProductIds . ' product id\'s wasn\'t  created');
+        }
+
         $this->generateMessage($product);
 
         return $this;
@@ -137,17 +156,23 @@ class ConfigurableProductBuilder
             'name' => $randName,
             'sku' => $randName,
             'visibility' => Visibility::VISIBILITY_BOTH,
+            'status' => Status::STATUS_ENABLED,
             'price' => '50',
             'attribute_set_id' => $this->productModel->getDefaultAttributeSetId(),
             'category_ids' => $categoryId,
-            'status' => Status::STATUS_ENABLED,
             'stock_data' => [
                 'qty' => '50',
                 'is_in_stock' => 1,
             ]
         ]);
 
-        return $this->productRepository->save($product);
+        try {
+            $product = $this->productRepository->save($product);
+        } catch (\Exception $e) {
+            $this->logger->warning('Configurable product ' . $product->getName() . ' wasn\'t created');
+        }
+
+        return $product;
     }
 
     private function getConfigurableAttributes()

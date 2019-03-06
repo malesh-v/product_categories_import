@@ -56,6 +56,7 @@ class ProductImporter
             'status' => Status::STATUS_ENABLED,
             'attribute_set_id' => $this->productModel->getDefaultAttributeSetId(),
             'visibility' => Visibility::VISIBILITY_NOT_VISIBLE,
+            'store_id' => 0,
         ];
     }
 
