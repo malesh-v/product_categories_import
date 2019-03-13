@@ -9,7 +9,7 @@ use Malesh\CustomImport\Provider\CsvProvidersCreatorFactory;
 use Malesh\CustomImport\Importer\ImporterFactory;
 use Malesh\CustomImport\Config\ConfigImport;
 use Malesh\CustomImport\Model\Reindexer;
-use Malesh\CustomImport\Model\ConfigurableProductBuilder;
+use Malesh\CustomImport\Model\ConfigurableProductBuilderFactory;
 
 class Index extends Action
 {
@@ -25,8 +25,8 @@ class Index extends Action
     /** @var \Malesh\CustomImport\Model\Reindexer */
     private $reindexer;
 
-    /** @var \Malesh\CustomImport\Model\ConfigurableProductBuilder */
-    private $configurableProductBuilder;
+    /** @var \Malesh\CustomImport\Model\ConfigurableProductBuilderFactory */
+    private $configurableProductBuilderFactory;
 
     public function __construct(
         Context $context,
@@ -34,14 +34,14 @@ class Index extends Action
         CsvProvidersCreatorFactory $csvProvidersCreatorFactory,
         ImporterFactory $importerFactory,
         Reindexer $reindexer,
-        ConfigurableProductBuilder $configurableProductBuilder
+        ConfigurableProductBuilderFactory $configurableProductBuilderFactory
     )
     {
         $this->_resultPageFactory = $resultPageFactory;
         $this->csvProvidersCreatorFactory = $csvProvidersCreatorFactory;
         $this->importerFactory = $importerFactory;
         $this->reindexer = $reindexer;
-        $this->configurableProductBuilder = $configurableProductBuilder;
+        $this->configurableProductBuilderFactory = $configurableProductBuilderFactory;
 
         parent::__construct($context);
     }
@@ -57,10 +57,13 @@ class Index extends Action
         ]);
 
         if (!$csvProvidersCreator->isError()) {
-            $this->importerFactory->create(['csvProviders' => $csvProvidersCreator])->import();
+            $importer = $this->importerFactory->create(['csvProviders' => $csvProvidersCreator])->import();
 
             //create configurable product
-            $configurableCreator = $this->configurableProductBuilder->create();
+            $configurableCreator = $this->configurableProductBuilderFactory->create([
+                'importer' => $importer
+            ]);
+
             $resultPage->getLayout()->getBlock('custom.import')->setConfigurable($configurableCreator);
 
             //run reindex

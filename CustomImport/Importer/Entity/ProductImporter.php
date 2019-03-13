@@ -9,6 +9,7 @@ use Magento\Catalog\Model\Product\Type;
 use Magento\Catalog\Model\Product as ProductModel;
 use Magento\Catalog\Model\Product\Visibility;
 use Malesh\CustomImport\Model\Attribute;
+use Malesh\CustomImport\Config\ConfigImport;
 
 class ProductImporter
 {
@@ -30,6 +31,9 @@ class ProductImporter
     /** @var array */
     private $defaultProductData;
 
+    /** @var array */
+    private $configurableProductData;
+
     public function __construct(
         ProductInterfaceFactory $productFactory,
         ProductRepositoryInterface $productRepository,
@@ -49,50 +53,90 @@ class ProductImporter
         $this->import($productsData);
     }
 
+    public function getConfigurableProductData()
+    {
+        return $this->configurableProductData;
+    }
+
     private function setDefaultProductValues()
     {
         $this->defaultProductData = [
-            'type' => Type::TYPE_SIMPLE,
+            'type' => Type::TYPE_VIRTUAL,
             'status' => Status::STATUS_ENABLED,
-            'attribute_set_id' => $this->productModel->getDefaultAttributeSetId(),
             'visibility' => Visibility::VISIBILITY_NOT_VISIBLE,
+            'attribute_set_id' => $this->productModel->getDefaultAttributeSetId(),
             'store_id' => 0,
         ];
     }
 
     private function import($productsData)
     {
-        foreach ($productsData as $item) {
-            /** @var \Magento\Catalog\Api\Data\ProductInterface $product */
-            $product = $this->productFactory->create();
-            $product->setData($this->getPreparedData($item));
+        $preparedProductsData = $this->prepareData($productsData);
 
-            $product->setCustomAttributes([
-                'attack_length' => $this->attributeModel->getAttributeLabel(
-                    'attack_length', $item['attack_length']
-                ),
-                'palm_size' => $this->attributeModel->getAttributeLabel(
-                    'palm_size', $item['palm_size']
-                ),
-                'is_extra'=> $item['is_extra']
-            ]);
+        $configurableData = [];
 
-            $this->productRepository->save($product);
+        foreach ($preparedProductsData as $name => $confItems) {
+
+            foreach ($confItems as $item) {
+                /** @var \Magento\Catalog\Api\Data\ProductInterface $product */
+                $product = $this->productFactory->create();
+                $product->setData($this->getPreparedProductData($item));
+
+                $product->setCustomAttributes([
+                    ConfigImport::ATTACK_LENGTH_CODE => $this->attributeModel->getAttributeLabel(
+                        ConfigImport::ATTACK_LENGTH_CODE,
+                        $item[ConfigImport::ATTACK_LENGTH_CODE]
+                    ),
+                    ConfigImport::PALM_SIZE_CODE => $this->attributeModel->getAttributeLabel(
+                        ConfigImport::PALM_SIZE_CODE,
+                        $item[ConfigImport::PALM_SIZE_CODE]
+                    ),
+                    ConfigImport::EXTRA_CODE => $item[ConfigImport::EXTRA_CODE]
+                ]);
+
+                $product = $this->productRepository->save($product);
+
+                $configurableData[$name][] = $product->getId();
+            }
         }
+
+        $this->configurableProductData = $configurableData;
     }
 
-    private function getPreparedData($item)
+    private function getPreparedProductData($item)
     {
         $categoryIds = $this->categoryImporter->getCategoriesByName($item['category'])->getAllIds();
-        $categoryId = count($categoryIds) > 0 ? $categoryIds[0] : null;
+        $categoryId = empty($categoryIds) ? null : $categoryIds[0];
 
         $item['category_ids'] = $categoryId;
-
+        $item['sku'] = $this->getGeneratedSku($item);
         $item['stock_data'] = [
             'qty' => $item['qty'],
             'is_in_stock' => 1,
         ];
 
         return array_merge($this->defaultProductData, $item);
+    }
+
+    private function prepareData($productsData)
+    {
+        $data = [];
+
+        foreach ($productsData as $item)
+        {
+            $data[$item['name']][] = $item;
+        }
+
+        return $data;
+    }
+
+    private function getGeneratedSku($item)
+    {
+        $sku = $item['name'];
+        $sku .= '-attack_length-' . $item['attack_length'];
+        $sku .= '-palm_size-' . $item['palm_size'];
+        $sku .= '-is_extra-' . $item['is_extra'];
+
+        return $sku;
     }
 }

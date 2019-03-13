@@ -6,14 +6,12 @@ use Magento\Eav\Model\Config;
 use Magento\Store\Model\StoreManagerInterface;
 use Magento\ConfigurableProduct\Model\Product\Type\Configurable;
 use Magento\ConfigurableProduct\Model\Product\Type\Configurable\Attribute;
-use Magento\ConfigurableProduct\Model\ResourceModel\Product\Type\Configurable\Attribute as ConfigurableAttribureResource;
+use Magento\ConfigurableProduct\Model\ResourceModel\Product\Type\Configurable\Attribute as ConfigurableAttributeResource;
 use Magento\Catalog\Model\Product;
 use Magento\Catalog\Api\Data\ProductInterfaceFactory;
 use Magento\Catalog\Api\ProductRepositoryInterface;
 use Magento\Catalog\Model\Product\Attribute\Source\Status;
-use Magento\Catalog\Model\Product\Type;
 use Magento\Catalog\Model\Product\Visibility;
-use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory as ProductCollectionFactory;
 use Magento\Catalog\Model\ResourceModel\Category\CollectionFactory as CategoryCollectionFactory;
 use Magento\Catalog\Model\Product as ProductModel;
 use Psr\Log\LoggerInterface;
@@ -38,9 +36,6 @@ class ConfigurableProductBuilder
     /** @var \Magento\Catalog\Model\ResourceModel\Category\CollectionFactory */
     private $categoryCollectionFactory;
 
-    /** @var \Magento\Catalog\Model\ResourceModel\Product\CollectionFactory */
-    private $productCollectionFactory;
-
     /** @var \Magento\Store\Model\StoreManagerInterface */
     private $storeManagerInterface;
 
@@ -56,6 +51,9 @@ class ConfigurableProductBuilder
     /** @var \Psr\Log\LoggerInterface */
     private $logger;
 
+    /** @var \Malesh\CustomImport\Importer\Entity\ProductImporter */
+    private $productImporter;
+
     public function __construct(
         ProductInterfaceFactory $productFactory,
         ProductModel $productModel,
@@ -63,10 +61,10 @@ class ConfigurableProductBuilder
         Config $eavConfig,
         Attribute $attributeModel,
         CategoryCollectionFactory $categoryCollectionFactory,
-        ProductCollectionFactory $productCollectionFactory,
         StoreManagerInterface $storeManagerInterface,
-        ConfigurableAttribureResource $optionResource,
-        LoggerInterface $logger
+        ConfigurableAttributeResource $optionResource,
+        LoggerInterface $logger,
+        $importer
     )
     {
         $this->productFactory = $productFactory;
@@ -75,46 +73,51 @@ class ConfigurableProductBuilder
         $this->eavConfig = $eavConfig;
         $this->attributeModel = $attributeModel;
         $this->categoryCollectionFactory = $categoryCollectionFactory;
-        $this->productCollectionFactory = $productCollectionFactory;
         $this->storeManagerInterface = $storeManagerInterface;
         $this->optionResource = $optionResource;
         $this->logger = $logger;
+        $this->productImporter = $importer->getProductImporter();
+
+        $this->create();
     }
 
     public function create()
     {
-        $product = $this->createConfigurable();
-        $associatedProductIds = $this->getAvailableProductsIds();
-        $attributeModel = $this->attributeModel;
+        $productsData = $this->productImporter->getConfigurableProductData();
 
-        $position = 0;
+        foreach ($productsData as $confProductName => $associatedProductIds) {
+            $product = $this->createConfigurable($confProductName);
+            $attributeModel = $this->attributeModel;
+            $position = 0;
 
-        foreach ($this->getConfigurableAttributes() as $attributeId) {
+            foreach ($this->getConfigurableAttributes() as $attributeId) {
 
-            $attributeModel = $attributeModel->setData([
-                'attribute_id' => $attributeId,
-                'product_id' => $product->getId(),
-                'position' => $position++,
-            ]);
+                $attributeModel = $attributeModel->setData([
+                    'attribute_id' => $attributeId,
+                    'product_id' => $product->getId(),
+                    'position' => $position++,
+                ]);
+
+                try {
+                    $this->optionResource->save($attributeModel);
+                }
+                catch (\Exception $e) {
+                    $this->logger->warning($e->getMessage());
+                }
+            }
+
+            $product->setTypeId(Configurable::TYPE_CODE);
+            $product->setAssociatedProductIds($associatedProductIds);
 
             try {
-                $this->optionResource->save($attributeModel);
+                $product->save();
+            } catch (\Exception $e) {
+                $txt = 'Configurable product with ' . implode(',', $associatedProductIds) . ' product id\'s wasn\'t  created';
+                $this->logger->warning($txt);
             }
-            catch (\Exception $e) {
-                $this->logger->warning($e->getMessage());
-            }
+
+            $this->generateMessage($product);
         }
-
-        $product->setTypeId(Configurable::TYPE_CODE);
-        $product->setAssociatedProductIds($associatedProductIds);
-
-        try {
-            $product->save();
-        } catch (\Exception $e) {
-            $this->logger->warning('Configurable product with ' . $associatedProductIds . ' product id\'s wasn\'t  created');
-        }
-
-        $this->generateMessage($product);
 
         return $this;
     }
@@ -127,34 +130,17 @@ class ConfigurableProductBuilder
     private function generateMessage($product)
     {
         $configurableName = $product->getName();
-        $this->info = 'Configurable product with name "' . $configurableName . '" was saved to "' . $this->categoryName . '"';
+        $this->info .= 'Configurable product with name "' . $configurableName . '" was saved to "' . $this->categoryName . '". ';
     }
 
-    private function getAvailableProductsIds()
-    {
-        $twoRandomProducts = [];
-
-        $collection = $this->productCollectionFactory->create();
-        $collection->addAttributeToFilter('type_id', Type::TYPE_SIMPLE)
-                   ->addAttributeToSelect(['attack_length', 'palm_size', 'is_extra'], '> 0');
-        $productsIds = $collection->getAllIds();
-
-        //generate two random product ids
-        $rand_keys = array_rand($productsIds, 2);
-        array_push($twoRandomProducts, $productsIds[$rand_keys[0]], $productsIds[$rand_keys[1]]);
-
-        return $twoRandomProducts;
-    }
-
-    private function createConfigurable()
+    private function createConfigurable($name)
     {
         $product = $this->productFactory->create();
-        $randName = 'configurable ' . mt_rand(2, 10);
         $categoryId = $this->getCategoryId();
 
         $product->setData([
-            'name' => $randName,
-            'sku' => $randName,
+            'name' => $name,
+            'sku' => $name,
             'visibility' => Visibility::VISIBILITY_BOTH,
             'status' => Status::STATUS_ENABLED,
             'price' => '50',

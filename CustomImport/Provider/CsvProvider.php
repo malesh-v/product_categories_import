@@ -55,7 +55,7 @@ class CsvProvider
             return false;
         }
 
-        if (count($dataCsv) < 2 || !$this->checkColumnNames($dataCsv[0])/* in_array('', $dataCsv[0], true)*/) {
+        if (count($dataCsv) < 2 || !$this->checkColumnNames($dataCsv[0])) {
             $this->errorCode = 2;
             return false;
         }

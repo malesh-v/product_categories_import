@@ -17,6 +17,9 @@ class Importer
     /** @var \Malesh\CustomImport\Provider\CsvProvidersCreator */
     private $csvProviders;
 
+    /** @var \Malesh\CustomImport\Importer\Entity\ProductImporter */
+    private $productImporter;
+
     public function __construct(
         CategoryImporterFactory $categoryImporterFactory,
         ProductImporterFactory $productImporterFactory,
@@ -39,12 +42,18 @@ class Importer
                          ->createCategories($provider->getPreparedData());
                     break;
                 case ConfigImport::PRODUCTS_CSV_FILENAME:
-                    $this->productImporterFactory->create([
+                    $this->productImporter = $this->productImporterFactory->create([
                         'productsData' => $provider->getPreparedData()
                     ]);
                     break;
             }
-
         }
+
+        return $this;
+    }
+
+    public function getProductImporter()
+    {
+        return $this->productImporter;
     }
 }

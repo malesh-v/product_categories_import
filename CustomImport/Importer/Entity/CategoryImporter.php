@@ -49,7 +49,7 @@ class CategoryImporter
 
             if ($value['parent']) {
                 $idParent = $this->getCategoriesByName($value['parent'])->getAllIds();
-                if (!count($idParent)) { continue; }
+                if (empty($idParent)) { continue; }
                 $parentId = $idParent[0];
             }
 
@@ -63,7 +63,7 @@ class CategoryImporter
             $this->categoryRepository->save($categoryModel);
         }
 
-        if (count($subCategoriesArray) > 0 ) {
+        if (!empty($subCategoriesArray)) {
             $this->createCategories($subCategoriesArray, false);
         }
     }
