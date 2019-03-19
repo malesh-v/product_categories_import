@@ -40,7 +40,9 @@ class CsvProvider
     }
 
     private function setDataFromCsv() {
-        if ($this->validateCsv()) { $this->prepareData(); }
+        if ($this->validateCsv()) {
+            $this->data = $this->prepareData();
+        }
 
         return $this;
     }
@@ -92,8 +94,6 @@ class CsvProvider
             $preparedData[] = array_combine($header, $value);
         }
 
-        $this->data = $preparedData;
-
-        return $this;
+        return $preparedData;
     }
 }
