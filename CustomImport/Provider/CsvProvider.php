@@ -69,16 +69,18 @@ class CsvProvider
         $this->validColumns;
         $result = true;
 
-        if (in_array('', $names, true)) { return false; }
-
-        foreach ($this->validColumns as $value) {
-            if (!in_array($value, $names, true)){
-                $result = false;
-                break;
+        if (in_array('', $names, true)) {
+            $result = false;
+        } else {
+            foreach ($this->validColumns as $value) {
+                if (!in_array($value, $names, true)){
+                    $result = false;
+                    break;
+                }
             }
         }
 
-        return $result ?: false;
+        return $result;
     }
 
     private function prepareData()
